@@ -1,0 +1,12 @@
+SkyMount
+Copyright 2026 the SkyMount authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Builds made with scripts/build-app.sh bundle the following libraries, which keep
+their own licenses (full texts in ThirdPartyLicenses/):
+
+- libssh2, BSD 3-Clause License, https://libssh2.org
+- OpenSSL 3, Apache License 2.0, https://www.openssl.org
+
+The app also links libcurl from macOS for FTP; it is not bundled.
