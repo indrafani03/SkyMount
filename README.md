@@ -4,6 +4,8 @@ SkyMount is a macOS menu bar app that mounts remote storage as ordinary folders 
 SFTP, FTP/FTPS, Amazon S3 and S3-compatible services, and Google Drive. It needs no kernel
 extension, no macFUSE and no administrator rights.
 
+A Windows version mounts the same services as network drives in Explorer; see [Windows](#windows).
+
 > **Beta.** SkyMount is a personal project tested on one Mac (macOS 27, Apple Silicon). It drives
 > the macOS NFS client, and during heavy `git` testing on a mount that client once caused a kernel
 > panic (with a mount option SkyMount no longer uses). Keep backups of anything you work on through
@@ -174,7 +176,118 @@ Automated tests on the development Mac (macOS 27, Apple Silicon):
   `nobrowse`.
 - **Loopback NFS** mounts in under a second without an extension, a kext or root.
 
+## Windows
+
+The Windows version lives in [windows/](windows). It is a tray app written in C# (.NET 10) that
+mounts each connection as a network drive (`S:`, labelled with the connection's name) through
+[WinFsp](https://github.com/winfsp/winfsp). The folder listing cache, content cache, Keep Offline
+and upload journal work as on macOS; they are a port of the Swift code, not shared with it.
+
+```
+Explorer and other apps
+        │  ordinary file system calls
+        ▼
+WinFsp driver  ── network drive S:  (\\SkyMount\<Name>)
+        │
+        ▼
+WinFspFileSystem: Windows names, open files, deletes and renames      windows/SkyMount.Core/Mount
+        │
+        ▼
+CachedFileSystem + WriteBack (working copies, upload journal, retries)
+        │
+        ▼
+Backends: SFTP (SSH.NET) · FTP/FTPS (FluentFTP) · S3 (SigV4) · Google Drive (REST v3)
+```
+
+Differences from macOS:
+
+- **WinFsp must be installed once**, which needs administrator rights:
+  `winget install WinFsp.WinFsp` or the installer from https://winfsp.dev/rel/. SkyMount itself runs
+  without them.
+- **Writing.** A file is uploaded three seconds after its last write, when a program flushes it, or
+  when the drive is unmounted. New files stay local until then, so temporary files that programs
+  delete right away never reach the server.
+- **Names.** Names are matched without regard to case, as Windows programs expect; an exact match
+  wins when a folder holds both `README` and `readme`. Server names with characters Windows forbids
+  (`\ : * ? " < > |`, a trailing dot or space) are shown with look-alike characters (`10：30.log`)
+  and keep their real names on the server.
+- **Symbolic links** on SFTP servers are shown as the files and folders they point to; broken links
+  are left out.
+- **No Explorer badges or context menu yet.** Keep a Folder Offline, Free Up Space and the list of
+  folders kept offline are in the tray menu.
+- **Explorer metadata** (`desktop.ini`, `Thumbs.db`) stays on this PC, like `._*` and `.DS_Store`.
+- **Secrets** live in Windows Credential Manager (`SkyMount/…` entries); connections, the cache
+  and the upload journal in `%LOCALAPPDATA%\SkyMount`, with a log in `skymount.log`.
+- **Open at Login** in the tray menu adds SkyMount to `HKCU\…\CurrentVersion\Run` with `--background`:
+  at sign-in it starts in the tray, while starting it by hand (Start menu, installer) opens the
+  Connections window.
+- The drive is a network drive, so Explorer deletes files permanently (after asking) instead of
+  moving them to a Recycle Bin on the server.
+
+### Build and run
+
+Requires Windows 10 or 11, WinFsp 2.1 and the .NET 10 SDK (`winget install Microsoft.DotNet.SDK.10`).
+
+```powershell
+dotnet build windows\SkyMount.Windows.slnx
+windows\SkyMount\bin\Debug\net10.0-windows\SkyMount.exe
+```
+
+### Installer
+
+```powershell
+winget install JRSoftware.InnoSetup
+powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1   # produces build\windows\SkyMount-<version>-setup.exe
+```
+
+The script publishes the app self-contained (no .NET install needed on the target PC), downloads
+the WinFsp 2.1 installer and checks its SHA-256, and packs both with
+[windows/SkyMount.iss](windows/SkyMount.iss). The setup program:
+
+- asks for administrator rights, installs into `Program Files\SkyMount` and adds a Start menu entry,
+- installs WinFsp silently when it is missing or older than 2.1 (the WinFsp license allows
+  distributing its unmodified installer),
+- before an upgrade or uninstall runs `SkyMount.exe --quit`, which makes the running app upload
+  pending changes, unmount and exit,
+- on uninstall leaves WinFsp, `%LOCALAPPDATA%\SkyMount` (it may hold changes not yet uploaded) and
+  the saved secrets in place.
+
+Neither the installer nor the app is code-signed, so SmartScreen warns when they are first run. To
+sign them, add a `SignTool` entry to `windows/SkyMount.iss` and sign `SkyMount.exe` before packing.
+
+`smctl` works as on macOS and has two more checks:
+
+```powershell
+$smctl = "windows\smctl\bin\Debug\net10.0-windows\smctl.exe"
+& $smctl selftest                 # S3 SigV4 signing against the AWS example
+& $smctl offlinetest              # Keep Offline without a drive (15 checks)
+& $smctl mounttest                # a local folder as a drive, worked on with ordinary file calls
+& $smctl mounttest C:\srv sftp 127.0.0.1 22 me C:\Users\me\.ssh\id_ed25519 / Test   # the same against a server serving C:\srv
+& $smctl local C:\some\folder LocalTest Y                                            # mounts a local folder on Y:
+```
+
+Set `SKYMOUNT_WINFSP_LOG` to a file name to log every file system request, and `SKYMOUNT_HOME`
+to keep the app's files somewhere other than `%LOCALAPPDATA%\SkyMount`.
+
+### Testing status (Windows)
+
+Windows 11 Home (build 26200), .NET 10, WinFsp 2.1.25156:
+
+| Backend or feature | Test setup | Result |
+|---|---|---|
+| Local folder | `smctl mounttest` (18 checks) | read, 12 MB block reads, 5 MB write + flush, append, truncate, kept mtime, safe-save rename, case-only rename, `mkdir`, recursive delete, temporary file never uploaded, server changes visible, unmount uploads pending writes |
+| SFTP | `smctl mounttest` against asyncssh 2.24.1, ed25519 key | same 18 checks; host key fingerprint pinned |
+| FTP | `smctl mounttest` against pyftpdlib 2.2.0, plain FTP | same checks except mtime (FTP cannot set it) |
+| S3 | moto 5.2.4, drive worked on from PowerShell | read, 12 MB ranged read, write + flush, replace, folder rename, delete; temporary file never uploaded |
+| Keep Offline | `smctl offlinetest` (15 checks) | all pass |
+| App | SFTP connection with "Mount when SkyMount opens" | mounted on the chosen letter at launch; host key saved; shown as a network drive; `--quit` uploads a file written just before, unmounts and exits |
+| Installer | silent install and uninstall, WinFsp 2.1 already present | WinFsp step skipped; installed app mounts and quits; uninstall removes the folder, Start menu entry and uninstall entry |
+| Not tested | | FTPS, Google Drive, Open at Login after a restart, sleep and network changes, the tray menu's folder dialogs, the installer on a PC without WinFsp, upgrading over a running app |
+
 ## License
 
 Apache License 2.0, see [LICENSE](LICENSE). Bundled libssh2 (BSD 3-Clause) and OpenSSL (Apache 2.0)
-keep their own licenses; see [NOTICE](NOTICE) and [ThirdPartyLicenses](ThirdPartyLicenses).
+keep their own licenses; see [NOTICE](NOTICE) and [ThirdPartyLicenses](ThirdPartyLicenses). The
+Windows build includes SSH.NET and FluentFTP (MIT) and the WinFsp .NET layer, used under the WinFsp
+FLOSS exception: WinFsp - Windows File System Proxy, Copyright (C) Bill Zissimopoulos,
+https://github.com/winfsp/winfsp.

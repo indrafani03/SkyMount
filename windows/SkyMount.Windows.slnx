@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="SkyMount.Core/SkyMount.Core.csproj" />
+  <Project Path="SkyMount/SkyMount.csproj" />
+  <Project Path="smctl/smctl.csproj" />
+</Solution>

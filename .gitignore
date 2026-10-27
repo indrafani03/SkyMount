@@ -4,3 +4,5 @@ build/
 *.xcodeproj
 xcuserdata/
 .DS_Store
+windows/**/bin/
+windows/**/obj/
