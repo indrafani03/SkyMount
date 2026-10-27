@@ -10,3 +10,14 @@ their own licenses (full texts in ThirdPartyLicenses/):
 - OpenSSL 3, Apache License 2.0, https://www.openssl.org
 
 The app also links libcurl from macOS for FTP; it is not bundled.
+
+Windows builds (windows/) include the following libraries, which keep their own
+licenses (full texts in ThirdPartyLicenses/):
+
+- SSH.NET, MIT License, https://github.com/sshnet/SSH.NET
+- FluentFTP, MIT License, https://github.com/robinrodricks/FluentFTP
+- WinFsp .NET layer (winfsp-msil.dll), GPLv3 with the WinFsp FLOSS exception,
+  used under that exception:
+  WinFsp - Windows File System Proxy, Copyright (C) Bill Zissimopoulos
+  https://github.com/winfsp/winfsp
+  WinFsp itself is installed separately and is not bundled.

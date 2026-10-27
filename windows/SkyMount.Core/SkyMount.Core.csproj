@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentFTP" Version="55.1.0" />
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
+    <!-- Must match the installed WinFsp release (2.1). -->
+    <PackageReference Include="winfsp.net" Version="2.1.25156" />
+  </ItemGroup>
+
+</Project>
