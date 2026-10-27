@@ -12,6 +12,8 @@ sealed class TrayApp : ApplicationContext
     readonly AppModel model = new();
     readonly NotifyIcon tray;
     readonly Icon appIcon, idleIcon, mountedIcon, transferringIcon;
+    /// Hidden window that owns the tray menu while it is open.
+    readonly NativeWindow menuOwner = new();
     ConnectionsForm? connections;
     bool quitting;
 
@@ -24,13 +26,12 @@ sealed class TrayApp : ApplicationContext
         mountedIcon = Badge(idleIcon, Color.FromArgb(0x2E, 0xA0, 0x43));
         transferringIcon = Badge(idleIcon, Color.FromArgb(0x1F, 0x6F, 0xEB));
 
-        var menu = new ContextMenuStrip();
-        menu.Opening += (_, e) =>
+        menuOwner.CreateHandle(new CreateParams());
+        tray = new NotifyIcon { Icon = idleIcon, Text = "SkyMount", Visible = true };
+        tray.MouseUp += (_, e) =>
         {
-            BuildMenu(menu);
-            e.Cancel = false;
+            if (e.Button == MouseButtons.Right) ShowMenu();
         };
-        tray = new NotifyIcon { Icon = idleIcon, Text = "SkyMount", Visible = true, ContextMenuStrip = menu };
         tray.MouseDoubleClick += (_, _) => ShowConnections();
         model.Changed += UpdateTray;
         // Unsent changes are journaled, but uploading them before Windows ends the session is better.
@@ -66,6 +67,51 @@ sealed class TrayApp : ApplicationContext
     }
 
     // Menu
+
+    /// Shows the tray menu as a native Windows menu. Explorer keeps Windows 11's hidden-icons flyout
+    /// open while such a menu is up, and the menu closes on a click elsewhere; a Windows Forms menu is
+    /// an ordinary window, so the flyout closed under it as soon as the pointer left the flyout.
+    /// The items are built as Windows Forms items and converted, and the chosen one is clicked.
+    void ShowMenu()
+    {
+        using var items = new ContextMenuStrip();
+        BuildMenu(items);
+        var commands = new List<ToolStripItem>();
+        var menu = NativeMenu(items.Items, commands);
+        try
+        {
+            var at = Cursor.Position;
+            // The owner must be the foreground window, or the menu does not close on an outside click.
+            SetForegroundWindow(menuOwner.Handle);
+            var chosen = TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, at.X, at.Y, menuOwner.Handle, IntPtr.Zero);
+            PostMessage(menuOwner.Handle, WM_NULL, IntPtr.Zero, IntPtr.Zero); // lets the next menu dismiss correctly
+            if (chosen > 0) commands[chosen - 1].PerformClick();
+        }
+        finally { DestroyMenu(menu); } // destroys the submenus too
+    }
+
+    /// A native popup menu with the same items; command IDs are positions in `commands` plus one.
+    static IntPtr NativeMenu(ToolStripItemCollection items, List<ToolStripItem> commands)
+    {
+        var menu = CreatePopupMenu();
+        foreach (ToolStripItem item in items)
+        {
+            if (item is ToolStripSeparator)
+            {
+                AppendMenu(menu, MF_SEPARATOR, 0, null);
+                continue;
+            }
+            var flags = (item.Enabled ? 0u : MF_GRAYED) | (item is ToolStripMenuItem { Checked: true } ? MF_CHECKED : 0u);
+            if (item is ToolStripMenuItem { HasDropDownItems: true } parent)
+            {
+                AppendMenu(menu, flags | MF_POPUP, (nuint)NativeMenu(parent.DropDownItems, commands), item.Text);
+                continue;
+            }
+            commands.Add(item);
+            AppendMenu(menu, flags, (nuint)commands.Count, item.Text);
+        }
+        return menu;
+    }
 
     void BuildMenu(ContextMenuStrip menu)
     {
@@ -211,4 +257,26 @@ sealed class TrayApp : ApplicationContext
 
     [DllImport("user32.dll")]
     static extern bool DestroyIcon(IntPtr handle);
+
+    const uint MF_GRAYED = 0x1, MF_CHECKED = 0x8, MF_POPUP = 0x10, MF_SEPARATOR = 0x800;
+    const uint TPM_RIGHTBUTTON = 0x2, TPM_RETURNCMD = 0x100;
+    const int WM_NULL = 0;
+
+    [DllImport("user32.dll")]
+    static extern IntPtr CreatePopupMenu();
+
+    [DllImport("user32.dll", EntryPoint = "AppendMenuW", CharSet = CharSet.Unicode)]
+    static extern bool AppendMenu(IntPtr menu, uint flags, nuint id, string? text);
+
+    [DllImport("user32.dll")]
+    static extern int TrackPopupMenuEx(IntPtr menu, uint flags, int x, int y, IntPtr owner, IntPtr parameters);
+
+    [DllImport("user32.dll")]
+    static extern bool DestroyMenu(IntPtr menu);
+
+    [DllImport("user32.dll")]
+    static extern bool PostMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    static extern bool SetForegroundWindow(IntPtr window);
 }
