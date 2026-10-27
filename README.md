@@ -6,6 +6,8 @@ extension, no macFUSE and no administrator rights.
 
 A Windows version mounts the same services as network drives in Explorer; see [Windows](#windows).
 
+Website and downloads: [skymount.space](https://skymount.space)
+
 > **Beta.** SkyMount is a personal project tested on one Mac (macOS 27, Apple Silicon). It drives
 > the macOS NFS client, and during heavy `git` testing on a mount that client once caused a kernel
 > panic (with a mount option SkyMount no longer uses). Keep backups of anything you work on through
