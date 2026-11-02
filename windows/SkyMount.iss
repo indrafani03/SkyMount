@@ -41,6 +41,9 @@ Source: "ThirdPartyLicenses\FluentFTP.txt"; DestDir: "{app}\ThirdPartyLicenses"
 Source: "ThirdPartyLicenses\WinFsp.txt"; DestDir: "{app}\ThirdPartyLicenses"
 Source: "build\windows\{#WinFspMsi}"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NeedsWinFsp
 
+[Tasks]
+Name: "startup"; Description: "Start SkyMount when I sign in to Windows (can be turned off later in Task Manager > Startup apps)"
+
 [Icons]
 Name: "{autoprograms}\SkyMount"; Filename: "{app}\SkyMount.exe"
 
@@ -53,8 +56,12 @@ Filename: "{app}\SkyMount.exe"; Description: "Start SkyMount"; Flags: postinstal
 Filename: "{app}\SkyMount.exe"; Parameters: "--quit"; Flags: runhidden waituntilterminated; RunOnceId: "QuitSkyMount"
 
 [Registry]
-; Open at Login (set from the tray menu) points into the app folder.
+; Start at sign-in, in the tray. Windows lists it in Task Manager > Startup apps, where it can be
+; turned off; the tray menu's Open at Login shows and changes the same entry.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SkyMount"; ValueData: """{app}\SkyMount.exe"" --background"; Tasks: startup
+; Removed on uninstall whoever set it, with Task Manager's on/off mark.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "SkyMount"; Flags: uninsdeletevalue dontcreatekey
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"; ValueType: none; ValueName: "SkyMount"; Flags: uninsdeletevalue dontcreatekey
 
 [Code]
 const

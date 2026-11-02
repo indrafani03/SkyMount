@@ -66,6 +66,7 @@ sealed class AppModel
             if (e.Mode == PowerModes.Resume) ui.Post(_ => NetworkChanged(), null);
         };
         // Rewrite the login item so it points at this copy (which may have moved) with today's arguments.
+        // One turned off in Task Manager stays off.
         if (OpensAtLogin) OpensAtLogin = true;
         foreach (var c in Connections.Where(c => c.AutoMount)) Mount(c.Id, automatic: true);
     }
@@ -136,19 +137,30 @@ sealed class AppModel
     // Login item
 
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    /// Where Task Manager's Startup apps (and Settings > Apps > Startup) mark a Run entry as turned off.
+    const string ApprovedKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 
+    /// The Run entry (also written by the installer), which Task Manager lists under Startup apps.
     public bool OpensAtLogin
     {
         get
         {
-            using var key = Registry.CurrentUser.OpenSubKey(RunKey);
-            return key?.GetValue("SkyMount") != null;
+            using var run = Registry.CurrentUser.OpenSubKey(RunKey);
+            using var approved = Registry.CurrentUser.OpenSubKey(ApprovedKey);
+            // Task Manager sets the lowest bit of the first byte when the entry is turned off.
+            var off = approved?.GetValue("SkyMount") is byte[] { Length: > 0 } state && (state[0] & 1) == 1;
+            return run?.GetValue("SkyMount") != null && !off;
         }
         set
         {
-            using var key = Registry.CurrentUser.CreateSubKey(RunKey);
-            if (value) key.SetValue("SkyMount", $"\"{Environment.ProcessPath}\" --background");
-            else key.DeleteValue("SkyMount", throwOnMissingValue: false);
+            using (var run = Registry.CurrentUser.CreateSubKey(RunKey))
+            {
+                if (value) run.SetValue("SkyMount", $"\"{Environment.ProcessPath}\" --background");
+                else run.DeleteValue("SkyMount", throwOnMissingValue: false);
+            }
+            // Turning it on here also clears Task Manager's "off", which would otherwise still win.
+            using var approved = Registry.CurrentUser.OpenSubKey(ApprovedKey, writable: true);
+            approved?.DeleteValue("SkyMount", throwOnMissingValue: false);
         }
     }
 
