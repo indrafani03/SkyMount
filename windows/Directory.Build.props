@@ -4,6 +4,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Version>0.1.0</Version>
+    <!-- Shown as the publisher in Task Manager's Startup apps and in the file's properties. -->
+    <Company>The SkyMount authors</Company>
     <Copyright>Copyright 2026 the SkyMount authors</Copyright>
   </PropertyGroup>
 </Project>

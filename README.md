@@ -220,9 +220,12 @@ Differences from macOS:
 - **Explorer metadata** (`desktop.ini`, `Thumbs.db`) stays on this PC, like `._*` and `.DS_Store`.
 - **Secrets** live in Windows Credential Manager (`SkyMount/…` entries); connections, the cache
   and the upload journal in `%LOCALAPPDATA%\SkyMount`, with a log in `skymount.log`.
-- **Open at Login** in the tray menu adds SkyMount to `HKCU\…\CurrentVersion\Run` with `--background`:
-  at sign-in it starts in the tray, while starting it by hand (Start menu, installer) opens the
-  Connections window.
+- **Start at sign-in.** The installer's "Start SkyMount when I sign in" option (on by default) and
+  Open at Login in the tray menu add SkyMount to `HKCU\…\CurrentVersion\Run` with `--background`.
+  Windows lists it in **Task Manager > Startup apps** (and Settings > Apps > Startup), where it can
+  be turned off; the tray menu shows the same state and turning it on there undoes Task Manager's
+  off. At sign-in it starts in the tray, while starting it by hand (Start menu, installer) opens
+  the Connections window.
 - The drive is a network drive, so Explorer deletes files permanently (after asking) instead of
   moving them to a Recycle Bin on the server.
 
@@ -247,12 +250,14 @@ the WinFsp 2.1 installer and checks its SHA-256, and packs both with
 [windows/SkyMount.iss](windows/SkyMount.iss). The setup program:
 
 - asks for administrator rights, installs into `Program Files\SkyMount` and adds a Start menu entry,
+- starts SkyMount at sign-in unless that option is unchecked (it can be turned off later in
+  Task Manager > Startup apps),
 - installs WinFsp silently when it is missing or older than 2.1 (the WinFsp license allows
   distributing its unmodified installer),
 - before an upgrade or uninstall runs `SkyMount.exe --quit`, which makes the running app upload
   pending changes, unmount and exit,
-- on uninstall leaves WinFsp, `%LOCALAPPDATA%\SkyMount` (it may hold changes not yet uploaded) and
-  the saved secrets in place.
+- on uninstall removes the sign-in entry, and leaves WinFsp, `%LOCALAPPDATA%\SkyMount` (it may hold
+  changes not yet uploaded) and the saved secrets in place.
 
 Neither the installer nor the app is code-signed, so SmartScreen warns when they are first run. To
 sign them, add a `SignTool` entry to `windows/SkyMount.iss` and sign `SkyMount.exe` before packing.
